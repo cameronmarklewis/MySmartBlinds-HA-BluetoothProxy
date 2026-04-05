@@ -17,6 +17,8 @@ from .const import (
     DISCOVER_KEY_MAX,
     HANDLE_KEY,
     HANDLE_SET,
+    UUID_KEY,
+    UUID_SET,
     KNOWN_LOCAL_NAMES,
     MAX_NATIVE_POSITION,
     MID_NATIVE_POSITION,
@@ -239,9 +241,8 @@ async def _validate_connectivity(
             max_attempts=max_attempts,
             timeout=timeout,
         )
-        await client.get_services()
-        _find_characteristic_by_handle(client, HANDLE_KEY)
-        _find_characteristic_by_handle(client, HANDLE_SET)
+        _resolve_write_target(client, HANDLE_KEY, UUID_KEY)
+        _resolve_write_target(client, HANDLE_SET, UUID_SET)
     except Exception as err:
         raise MySmartBlindsConnectionError(str(err)) from err
     finally:
@@ -273,9 +274,8 @@ async def _write_position(
             max_attempts=max_attempts,
             timeout=timeout,
         )
-        await client.get_services()
-        key_char = _find_characteristic_by_handle(client, HANDLE_KEY)
-        set_char = _find_characteristic_by_handle(client, HANDLE_SET)
+        key_char = _resolve_write_target(client, HANDLE_KEY, UUID_KEY)
+        set_char = _resolve_write_target(client, HANDLE_SET, UUID_SET)
         _LOGGER.debug("Writing key and target position to %s via BLE", address)
         await client.write_gatt_char(key_char, key, response=True)
         await client.write_gatt_char(set_char, bytes([native_position]), response=True)
@@ -286,18 +286,24 @@ async def _write_position(
             await client.disconnect()
 
 
-def _find_characteristic_by_handle(
-    client: BleakClient, handle: int
-) -> BleakGATTCharacteristic:
-    services = client.services
-    if services is None:
-        raise MySmartBlindsCharacteristicError("No GATT services available")
+def _resolve_write_target(
+    client: BleakClient, handle: int, uuid: str
+) -> BleakGATTCharacteristic | str:
+    services = getattr(client, "services", None)
+    if services is not None:
+        try:
+            for service in services:
+                for char in service.characteristics:
+                    if getattr(char, "handle", None) == handle:
+                        return char
+        except Exception:
+            pass
 
-    for service in services:
-        for char in service.characteristics:
-            if getattr(char, "handle", None) == handle:
-                return char
+        try:
+            characteristic = services.get_characteristic(uuid)
+            if characteristic is not None:
+                return characteristic
+        except Exception:
+            pass
 
-    raise MySmartBlindsCharacteristicError(
-        f"Could not find GATT characteristic handle 0x{handle:04x}"
-    )
+    return uuid
