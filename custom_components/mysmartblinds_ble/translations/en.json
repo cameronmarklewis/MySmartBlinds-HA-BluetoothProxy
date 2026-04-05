@@ -8,15 +8,52 @@
         "data": {
           "name": "Name",
           "address": "Bluetooth address",
-          "key": "Pairing key (hex)",
           "close_direction": "Close direction",
           "connection_timeout": "Connection timeout (seconds)",
-          "write_retries": "Write retries"
+          "write_retries": "Write retries",
+          "discovery_attempts": "Auto-discovery key attempts"
+        }
+      },
+      "cloud_login": {
+        "title": "Sign in to MySmartBlinds",
+        "description": "Sign in with your MySmartBlinds app account to fetch encoded MAC and key data for the selected blind. Target address: {address}",
+        "data": {
+          "username": "Username or email",
+          "password": "Password"
+        }
+      },
+      "cloud_select": {
+        "title": "Select blind from cloud account",
+        "description": "No exact cloud match was found for {address}. Choose one of the {count} blinds returned by your account."
+      },
+      "manual_key": {
+        "title": "Enter pairing key manually",
+        "data": {
+          "key": "Pairing key (hex)"
+        }
+      },
+      "setup_method": {
+        "title": "Choose setup method",
+        "description": "Choose how to fetch the pairing key for {address}.",
+        "menu_options": {
+          "auto": "Auto discover key over Bluetooth",
+          "cloud": "Sign in and fetch key from MySmartBlinds account",
+          "manual": "Enter key manually"
+        }
+      },
+      "auto_failed": {
+        "title": "Auto discovery did not find a key",
+        "description": "{error}",
+        "menu_options": {
+          "cloud": "Sign in and fetch key from MySmartBlinds account",
+          "manual": "Enter key manually"
         }
       }
     },
     "error": {
-      "invalid_input": "Check the Bluetooth address and key format.",
+      "invalid_address": "Check the Bluetooth address format.",
+      "invalid_key": "Check the pairing key format.",
+      "cloud_login_failed": "Cloud login failed. Check your credentials or API connectivity.",
       "not_supported": "This Bluetooth discovery does not look like a supported MySmartBlinds device."
     },
     "abort": {

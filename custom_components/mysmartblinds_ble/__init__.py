@@ -14,10 +14,15 @@ from .const import (
     ATTR_ATTEMPTS,
     ATTR_DEVICES,
     ATTR_DISCOVERED_KEY,
+    ATTR_KEY_SOURCE,
     ATTR_LAST_ERROR,
     ATTR_NAME,
     ATTR_RSSI,
     CONF_ADDRESS,
+    CONF_CLOSE_DIRECTION,
+    CONF_CONNECTION_TIMEOUT,
+    CONF_KEY,
+    CONF_WRITE_RETRIES,
     DEFAULT_CLOSE_DIRECTION,
     DEFAULT_CONNECTION_TIMEOUT,
     DEFAULT_WRITE_RETRIES,
@@ -119,18 +124,24 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     api = MySmartBlindsApi(
         hass=hass,
         address=entry.data[CONF_ADDRESS],
-        key_hex=entry.data["key"],
+        key_hex=entry.data[CONF_KEY],
         close_direction=entry.options.get(
-            "close_direction", entry.data.get("close_direction", DEFAULT_CLOSE_DIRECTION)
+            CONF_CLOSE_DIRECTION, entry.data.get(CONF_CLOSE_DIRECTION, DEFAULT_CLOSE_DIRECTION)
         ),
         connection_timeout=entry.options.get(
-            "connection_timeout", entry.data.get("connection_timeout", DEFAULT_CONNECTION_TIMEOUT)
+            CONF_CONNECTION_TIMEOUT,
+            entry.data.get(CONF_CONNECTION_TIMEOUT, DEFAULT_CONNECTION_TIMEOUT),
         ),
         write_retries=entry.options.get(
-            "write_retries", entry.data.get("write_retries", DEFAULT_WRITE_RETRIES)
+            CONF_WRITE_RETRIES, entry.data.get(CONF_WRITE_RETRIES, DEFAULT_WRITE_RETRIES)
         ),
     )
     hass.data[DOMAIN][entry.entry_id] = api
+    _LOGGER.debug(
+        "Loaded MySmartBlinds entry for %s using key source %s",
+        entry.data[CONF_ADDRESS],
+        entry.data.get(ATTR_KEY_SOURCE) or entry.data.get("key_source"),
+    )
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
 

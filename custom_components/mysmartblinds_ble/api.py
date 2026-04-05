@@ -177,17 +177,26 @@ async def discover_devices(hass: HomeAssistant) -> list[DiscoveredBlind]:
     return sorted(candidates.values(), key=lambda item: (item.name or "", item.address))
 
 
-async def discover_key(hass: HomeAssistant, address: str, attempts: int = 256) -> str | None:
+async def discover_key(
+    hass: HomeAssistant,
+    address: str,
+    attempts: int = 256,
+    *,
+    timeout: float = DEFAULT_CONNECTION_TIMEOUT,
+    max_attempts: int = 2,
+    native_position: int = MAX_NATIVE_POSITION,
+) -> str | None:
     address = normalize_address(address)
-    for guess in range(min(attempts, DISCOVER_KEY_MAX + 1)):
+    attempts = max(1, min(attempts, DISCOVER_KEY_MAX + 1))
+    for guess in range(attempts):
         try:
             await _write_position(
                 hass,
                 address,
                 bytes([guess]),
-                MAX_NATIVE_POSITION,
-                timeout=DEFAULT_CONNECTION_TIMEOUT,
-                max_attempts=2,
+                native_position,
+                timeout=timeout,
+                max_attempts=max_attempts,
             )
             return f"{guess:02x}"
         except MySmartBlindsError:

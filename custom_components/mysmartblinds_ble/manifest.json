@@ -11,14 +11,23 @@
       "connectable": true
     }
   ],
-  "codeowners": ["@cameronlewis"],
+  "codeowners": [
+    "@cameronlewis"
+  ],
   "config_flow": true,
-  "dependencies": ["bluetooth"],
+  "dependencies": [
+    "bluetooth"
+  ],
   "documentation": "https://github.com/cameronlewis/mysmartblinds_ble",
   "integration_type": "device",
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/cameronlewis/mysmartblinds_ble/issues",
-  "loggers": ["custom_components.mysmartblinds_ble"],
-  "requirements": ["bleak>=0.22.3", "bleak-retry-connector>=3.8.0"],
-  "version": "0.2.0"
+  "loggers": [
+    "custom_components.mysmartblinds_ble"
+  ],
+  "requirements": [
+    "bleak>=0.22.3",
+    "bleak-retry-connector>=3.8.0"
+  ],
+  "version": "0.3.0"
 }
