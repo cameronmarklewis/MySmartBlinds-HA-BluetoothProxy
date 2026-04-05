@@ -97,6 +97,20 @@ class MySmartBlindsApi:
             return 100 - ha_position
         return 200 - ha_position
 
+
+    def is_device_present(self) -> bool:
+        return (
+            bluetooth.async_ble_device_from_address(
+                self.hass, self.address, connectable=True
+            )
+            is not None
+        )
+
+    async def async_refresh_availability(self) -> None:
+        self.state.available = self.is_device_present()
+        if self.state.available:
+            self.state.last_error = None
+
     async def async_ping(self) -> None:
         async with self._lock:
             await _validate_connectivity(

@@ -224,6 +224,7 @@ class MySmartBlindsBleConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 match = self._find_cloud_match(blinds, address)
                 if match is not None:
                     self._config[CONF_ADDRESS] = address
+                    self._config[CONF_NAME] = match.display_name
                     return self._create_entry(match.key_hex, KEY_SOURCE_CLOUD)
                 return await self.async_step_cloud_select()
 
@@ -256,6 +257,7 @@ class MySmartBlindsBleConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 if not mac_matches(blind.address, requested_address):
                     target_address = blind.address
                 self._config[CONF_ADDRESS] = target_address
+                self._config[CONF_NAME] = blind.display_name
                 await self.async_set_unique_id(target_address)
                 self._abort_if_unique_id_configured()
                 return self._create_entry(blind.key_hex, KEY_SOURCE_CLOUD)

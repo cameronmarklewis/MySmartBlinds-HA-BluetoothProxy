@@ -33,6 +33,7 @@ class MySmartBlindsCover(RestoreEntity, CoverEntity):
     _attr_device_class = CoverDeviceClass.BLIND
     _attr_has_entity_name = True
     _attr_name = None
+    _attr_should_poll = True
     _attr_supported_features = (
         CoverEntityFeature.OPEN
         | CoverEntityFeature.CLOSE
@@ -47,7 +48,7 @@ class MySmartBlindsCover(RestoreEntity, CoverEntity):
         self._attr_translation_key = "blind"
         self._attr_device_info = {
             "identifiers": {(DOMAIN, self._attr_unique_id)},
-            "name": entry.data.get(CONF_NAME, api.device_name),
+            "name": entry.title or entry.data.get(CONF_NAME, api.device_name),
             "manufacturer": "MySmartBlinds",
             "model": "BLE Blind Motor",
             "connections": {("bluetooth", api.address)},
@@ -61,7 +62,10 @@ class MySmartBlindsCover(RestoreEntity, CoverEntity):
             except (TypeError, ValueError):
                 last = 50
             self._api.state.native_position = self._api.ha_to_native(last)
-            self._api.state.available = True
+        await self._api.async_refresh_availability()
+
+    async def async_update(self) -> None:
+        await self._api.async_refresh_availability()
 
     @property
     def available(self) -> bool:
