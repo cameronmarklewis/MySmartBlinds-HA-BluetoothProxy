@@ -1,0 +1,24 @@
+{
+  "domain": "mysmartblinds_ble",
+  "name": "MySmartBlinds BLE",
+  "bluetooth": [
+    {
+      "local_name": "SmartBlind_DFU",
+      "connectable": true
+    },
+    {
+      "local_name": "SmartBlind",
+      "connectable": true
+    }
+  ],
+  "codeowners": ["@cameronlewis"],
+  "config_flow": true,
+  "dependencies": ["bluetooth"],
+  "documentation": "https://github.com/cameronlewis/mysmartblinds_ble",
+  "integration_type": "device",
+  "iot_class": "local_polling",
+  "issue_tracker": "https://github.com/cameronlewis/mysmartblinds_ble/issues",
+  "loggers": ["custom_components.mysmartblinds_ble"],
+  "requirements": ["bleak>=0.22.3", "bleak-retry-connector>=3.8.0"],
+  "version": "0.2.0"
+}

@@ -1,0 +1,9 @@
+{
+  "name": "MySmartBlinds BLE",
+  "content_in_root": false,
+  "country": ["GB", "US", "CA", "AU"],
+  "homeassistant": "2024.6.0",
+  "render_readme": true,
+  "zip_release": false,
+  "filename": "custom_components/mysmartblinds_ble"
+}

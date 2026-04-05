@@ -1,0 +1,46 @@
+{
+  "title": "MySmartBlinds BLE",
+  "config": {
+    "step": {
+      "user": {
+        "title": "MySmartBlinds BLE",
+        "description": "Add a MySmartBlinds motor using a Bluetooth adapter or ESPHome Bluetooth proxy. Nearby devices: {discovered}",
+        "data": {
+          "name": "Name",
+          "address": "Bluetooth address",
+          "key": "Pairing key (hex)",
+          "close_direction": "Close direction",
+          "connection_timeout": "Connection timeout (seconds)",
+          "write_retries": "Write retries"
+        }
+      }
+    },
+    "error": {
+      "invalid_input": "Check the Bluetooth address and key format.",
+      "not_supported": "This Bluetooth discovery does not look like a supported MySmartBlinds device."
+    },
+    "abort": {
+      "already_configured": "This blind is already configured.",
+      "not_supported": "This Bluetooth device is not supported by this integration."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "MySmartBlinds BLE options",
+        "data": {
+          "close_direction": "Close direction",
+          "connection_timeout": "Connection timeout (seconds)",
+          "write_retries": "Write retries"
+        }
+      }
+    }
+  },
+  "entity": {
+    "cover": {
+      "blind": {
+        "name": "Blind"
+      }
+    }
+  }
+}

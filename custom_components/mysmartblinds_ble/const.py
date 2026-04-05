@@ -1,0 +1,37 @@
+DOMAIN = "mysmartblinds_ble"
+PLATFORMS = ["cover"]
+
+DEFAULT_NAME = "MySmartBlinds"
+DEFAULT_CLOSE_DIRECTION = "down"
+DEFAULT_CONNECTION_TIMEOUT = 15.0
+DEFAULT_WRITE_RETRIES = 3
+
+CONF_ADDRESS = "address"
+CONF_KEY = "key"
+CONF_CLOSE_DIRECTION = "close_direction"
+CONF_CONNECTION_TIMEOUT = "connection_timeout"
+CONF_WRITE_RETRIES = "write_retries"
+
+SERVICE_DISCOVER_KEY = "discover_key"
+SERVICE_SCAN_DEVICES = "scan_devices"
+SERVICE_PING = "ping"
+
+ATTR_DISCOVERED_KEY = "discovered_key"
+ATTR_ATTEMPTS = "attempts"
+ATTR_DEVICES = "devices"
+ATTR_RSSI = "rssi"
+ATTR_NAME = "name"
+ATTR_LAST_ERROR = "last_error"
+
+UUID_KEY = "00001409-1212-efde-1600-785feabcd123"
+UUID_SET = "0000140b-1212-efde-1600-785feabcd123"
+
+HANDLE_KEY = 0x001B
+HANDLE_SET = 0x001F
+
+MAX_NATIVE_POSITION = 200
+MID_NATIVE_POSITION = 100
+MIN_NATIVE_POSITION = 0
+
+DISCOVER_KEY_MAX = 255
+KNOWN_LOCAL_NAMES = {"SmartBlind_DFU", "SmartBlind", "MySmartBlinds"}
