@@ -4,6 +4,7 @@ import voluptuous as vol
 
 from homeassistant import config_entries
 from homeassistant.const import CONF_NAME
+from homeassistant.helpers.storage import Store
 
 from .api import MySmartBlindsValidationError, discover_devices, discover_key, normalize_address, normalize_key
 from .cloud import CloudBlind, MySmartBlindsCloudError, async_fetch_cloud_blinds, mac_matches
@@ -19,6 +20,8 @@ from .const import (
     CONF_SETUP_METHOD,
     CONF_USERNAME,
     CONF_WRITE_RETRIES,
+    CLOUD_CACHE_STORE_KEY,
+    CLOUD_CACHE_VERSION,
     DEFAULT_CLOSE_DIRECTION,
     DEFAULT_CONNECTION_TIMEOUT,
     DEFAULT_KEY_DISCOVERY_ATTEMPTS,
@@ -42,9 +45,55 @@ class MySmartBlindsBleConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     def __init__(self) -> None:
         self._config: dict[str, object] = {}
         self._cloud_blinds: list[CloudBlind] = []
+        self._cached_cloud_blinds: list[CloudBlind] | None = None
         self._autodiscovered_key: str | None = None
         self._auto_error: str | None = None
         self._cloud_error: str | None = None
+
+    async def _async_load_cloud_cache(self) -> list[CloudBlind]:
+        if self._cached_cloud_blinds is not None:
+            return self._cached_cloud_blinds
+
+        store = Store(self.hass, CLOUD_CACHE_VERSION, CLOUD_CACHE_STORE_KEY)
+        raw = await store.async_load() or {}
+        blinds: list[CloudBlind] = []
+        for item in raw.get("blinds", []):
+            try:
+                blinds.append(
+                    CloudBlind(
+                        name=item.get("name") or "MySmartBlinds",
+                        room_name=item.get("room_name"),
+                        encoded_mac=item.get("encoded_mac") or "",
+                        encoded_passkey=item.get("encoded_passkey") or "",
+                        address=item.get("address") or "",
+                        reversed_address=item.get("reversed_address") or "",
+                        key_hex=item.get("key_hex") or "",
+                    )
+                )
+            except Exception:
+                continue
+        self._cached_cloud_blinds = blinds
+        return blinds
+
+    async def _async_save_cloud_cache(self, blinds: list[CloudBlind]) -> None:
+        self._cached_cloud_blinds = blinds
+        store = Store(self.hass, CLOUD_CACHE_VERSION, CLOUD_CACHE_STORE_KEY)
+        await store.async_save(
+            {
+                "blinds": [
+                    {
+                        "name": blind.name,
+                        "room_name": blind.room_name,
+                        "encoded_mac": blind.encoded_mac,
+                        "encoded_passkey": blind.encoded_passkey,
+                        "address": blind.address,
+                        "reversed_address": getattr(blind, "reversed_address", ""),
+                        "key_hex": blind.key_hex,
+                    }
+                    for blind in blinds
+                ]
+            }
+        )
 
     async def async_step_user(self, user_input=None):
         errors: dict[str, str] = {}
@@ -69,6 +118,13 @@ class MySmartBlindsBleConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 }
                 await self.async_set_unique_id(address)
                 self._abort_if_unique_id_configured()
+
+                cached_blinds = await self._async_load_cloud_cache()
+                cached_match = self._find_cloud_match(cached_blinds, address)
+                if cached_match is not None:
+                    self._config[CONF_NAME] = cached_match.display_name
+                    return self._create_entry(cached_match.key_hex, KEY_SOURCE_CLOUD)
+
                 return await self.async_step_setup_method()
 
         schema = vol.Schema(
@@ -218,6 +274,7 @@ class MySmartBlindsBleConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors["base"] = "cloud_login_failed"
             else:
                 self._cloud_blinds = blinds
+                await self._async_save_cloud_cache(blinds)
                 self._config[CONF_USERNAME] = username
                 self._config[CONF_PASSWORD] = password
                 address = str(self._config[CONF_ADDRESS])

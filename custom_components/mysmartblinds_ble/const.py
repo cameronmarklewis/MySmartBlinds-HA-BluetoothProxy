@@ -78,3 +78,7 @@ query GetUserInfo {
   }
 }
 """
+
+
+CLOUD_CACHE_STORE_KEY = "mysmartblinds_ble_cloud_cache"
+CLOUD_CACHE_VERSION = 1
