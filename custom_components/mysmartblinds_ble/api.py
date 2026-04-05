@@ -59,13 +59,6 @@ class DiscoveredBlind:
     rssi: int | None
 
 
-class _WriteCharacteristicShim:
-    def __init__(self, handle: int, uuid: str, *, write_without_response: bool = False) -> None:
-        self.handle = handle
-        self.uuid = uuid
-        self.properties = ["write-without-response"] if write_without_response else ["write"]
-
-
 class MySmartBlindsApi:
     def __init__(
         self,
@@ -305,41 +298,78 @@ async def _async_write_char(
         return
     except BleakCharacteristicNotFoundError:
         _LOGGER.debug(
-            "Characteristic lookup failed for handle 0x%04x / %s via wrapper, trying backend shim",
+            "Characteristic lookup failed for handle 0x%04x / %s via wrapper, refreshing services/backend lookup",
             handle,
             uuid,
         )
     except Exception as err:
         message = str(err).lower()
-        if "error=133" not in message and "unlikely error" not in message:
-            raise
-        _LOGGER.debug(
-            "Write-with-response failed for handle 0x%04x / %s, retrying with backend shim: %s",
-            handle,
-            uuid,
-            err,
-        )
+        if "error=133" in message or "unlikely error" in message:
+            _LOGGER.debug(
+                "Write-with-response failed for handle 0x%04x / %s, retrying without response: %s",
+                handle,
+                uuid,
+                err,
+            )
+            await client.write_gatt_char(resolved_target, data, response=False)
+            return
+        raise
 
-    backend = getattr(client, "_backend", None)
-    if backend is None:
-        raise MySmartBlindsConnectionError(
-            f"No backend available for direct write to handle {handle}"
-        )
-
-    shim = _WriteCharacteristicShim(handle, uuid, write_without_response=False)
+    backend_target = await _async_resolve_backend_characteristic(client, handle, uuid)
     try:
-        await backend.write_gatt_char(shim, data, True)
+        await client.write_gatt_char(backend_target, data, response=True)
         return
     except Exception as err:
         _LOGGER.debug(
-            "Backend write-with-response failed for handle 0x%04x / %s, retrying without response: %s",
+            "Backend characteristic write-with-response failed for handle 0x%04x / %s, retrying without response: %s",
             handle,
             uuid,
             err,
         )
+    await client.write_gatt_char(backend_target, data, response=False)
 
-    shim_no_resp = _WriteCharacteristicShim(handle, uuid, write_without_response=True)
-    await backend.write_gatt_char(shim_no_resp, data, False)
+
+async def _async_resolve_backend_characteristic(
+    client: BleakClient,
+    handle: int,
+    uuid: str,
+):
+    backend = getattr(client, "_backend", None)
+    if backend is None:
+        raise MySmartBlindsConnectionError(
+            f"No backend available for characteristic lookup for handle {handle}"
+        )
+
+    backend_get_services = getattr(backend, "get_services", None)
+    if callable(backend_get_services):
+        try:
+            await backend_get_services()
+        except Exception as err:
+            _LOGGER.debug("Backend service refresh failed for handle 0x%04x / %s: %s", handle, uuid, err)
+
+    for source_name in ("services", "_services"):
+        services = getattr(backend, source_name, None)
+        if services is None:
+            continue
+
+        try:
+            for service in services:
+                for char in service.characteristics:
+                    if getattr(char, "handle", None) == handle:
+                        return char
+        except Exception:
+            pass
+
+        try:
+            characteristic = services.get_characteristic(uuid)
+            if characteristic is not None:
+                return characteristic
+        except Exception:
+            pass
+
+    raise MySmartBlindsCharacteristicError(
+        f"Could not resolve characteristic handle 0x{handle:04x} / {uuid} from backend services"
+    )
 
 
 def _resolve_write_target(
