@@ -6,7 +6,7 @@ from homeassistant import config_entries
 from homeassistant.const import CONF_NAME
 
 from .api import MySmartBlindsValidationError, discover_devices, discover_key, normalize_address, normalize_key
-from .cloud import CloudBlind, MySmartBlindsCloudError, async_fetch_cloud_blinds
+from .cloud import CloudBlind, MySmartBlindsCloudError, async_fetch_cloud_blinds, mac_matches
 from .const import (
     CONF_ADDRESS,
     CONF_CLOUD_BLIND,
@@ -193,8 +193,9 @@ class MySmartBlindsBleConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 self._config[CONF_USERNAME] = username
                 self._config[CONF_PASSWORD] = password
                 address = str(self._config[CONF_ADDRESS])
-                match = next((blind for blind in blinds if blind.address == address), None)
+                match = next((blind for blind in blinds if mac_matches(blind.address, address)), None)
                 if match is not None:
+                    self._config[CONF_ADDRESS] = address
                     return self._create_entry(match.key_hex, KEY_SOURCE_CLOUD)
                 return await self.async_step_cloud_select()
 
@@ -227,10 +228,16 @@ class MySmartBlindsBleConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 self._abort_if_unique_id_configured()
                 return self._create_entry(blind.key_hex, KEY_SOURCE_CLOUD)
 
-        options = {
-            blind.encoded_mac: f"{blind.display_name} ({blind.address})"
-            for blind in self._cloud_blinds
-        }
+        requested_address = str(self._config.get(CONF_ADDRESS, ""))
+        options = {}
+        for blind in self._cloud_blinds:
+            label = f"{blind.display_name} ({blind.address})"
+            if mac_matches(blind.address, requested_address):
+                if blind.address != requested_address:
+                    label += f" [matches {requested_address} via reversed MAC]"
+                else:
+                    label += " [exact match]"
+            options[blind.encoded_mac] = label
         schema = vol.Schema(
             {
                 vol.Required(CONF_CLOUD_BLIND): vol.In(options),

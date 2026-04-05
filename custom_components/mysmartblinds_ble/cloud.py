@@ -29,6 +29,7 @@ class CloudBlind:
     encoded_mac: str
     encoded_passkey: str
     address: str
+    reversed_address: str
     key_hex: str
 
     @property
@@ -124,6 +125,7 @@ async def async_fetch_cloud_blinds(
                 encoded_mac=encoded_mac,
                 encoded_passkey=encoded_passkey,
                 address=address,
+                reversed_address=reverse_address(address),
                 key_hex=key_hex,
             )
         )
@@ -135,6 +137,32 @@ def decode_mac(encoded_mac: str) -> str:
     if len(raw) != 6:
         raise ValueError("encoded MAC did not decode to 6 bytes")
     return ":".join(f"{part:02X}" for part in raw)
+
+
+def normalize_mac(address: str) -> str:
+    return "".join(char for char in address.upper() if char in "0123456789ABCDEF")
+
+
+def reverse_address(address: str) -> str:
+    normalized = normalize_mac(address)
+    if len(normalized) != 12:
+        raise ValueError("address did not normalize to 6 bytes")
+    pairs = [normalized[index:index + 2] for index in range(0, 12, 2)]
+    return ":".join(reversed(pairs))
+
+
+def mac_matches(candidate: str, target: str) -> bool:
+    try:
+        normalized_candidate = normalize_mac(candidate)
+        normalized_target = normalize_mac(target)
+    except Exception:
+        return False
+    if len(normalized_candidate) != 12 or len(normalized_target) != 12:
+        return False
+    if normalized_candidate == normalized_target:
+        return True
+    reversed_candidate = normalize_mac(reverse_address(candidate))
+    return reversed_candidate == normalized_target
 
 
 def decode_passkey(encoded_passkey: str) -> str:
