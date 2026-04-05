@@ -99,9 +99,32 @@ class MySmartBlindsBleConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
     async def async_step_setup_method(self, user_input=None):
-        return self.async_show_menu(
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            method = user_input[CONF_SETUP_METHOD]
+            if method == OPTION_AUTO:
+                return await self.async_step_auto_discover()
+            if method == OPTION_CLOUD:
+                return await self.async_step_cloud_login()
+            if method == OPTION_MANUAL:
+                return await self.async_step_manual_key()
+            errors["base"] = "invalid_setup_method"
+
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_SETUP_METHOD, default=OPTION_AUTO): vol.In(
+                    {
+                        OPTION_AUTO: "Auto discover key over Bluetooth",
+                        OPTION_CLOUD: "Sign in and fetch key from MySmartBlinds account",
+                        OPTION_MANUAL: "Enter key manually",
+                    }
+                )
+            }
+        )
+        return self.async_show_form(
             step_id="setup_method",
-            menu_options=["auto_discover", "cloud_login", "manual_key"],
+            data_schema=schema,
+            errors=errors,
             description_placeholders={"address": str(self._config.get(CONF_ADDRESS, ""))},
         )
 
@@ -128,9 +151,29 @@ class MySmartBlindsBleConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return await self.async_step_auto_failed()
 
     async def async_step_auto_failed(self, user_input=None):
-        return self.async_show_menu(
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            method = user_input[CONF_SETUP_METHOD]
+            if method == OPTION_CLOUD:
+                return await self.async_step_cloud_login()
+            if method == OPTION_MANUAL:
+                return await self.async_step_manual_key()
+            errors["base"] = "invalid_setup_method"
+
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_SETUP_METHOD, default=OPTION_CLOUD): vol.In(
+                    {
+                        OPTION_CLOUD: "Sign in and fetch key from MySmartBlinds account",
+                        OPTION_MANUAL: "Enter key manually",
+                    }
+                )
+            }
+        )
+        return self.async_show_form(
             step_id="auto_failed",
-            menu_options=["cloud_login", "manual_key"],
+            data_schema=schema,
+            errors=errors,
             description_placeholders={"error": self._auto_error or "Key discovery failed."},
         )
 

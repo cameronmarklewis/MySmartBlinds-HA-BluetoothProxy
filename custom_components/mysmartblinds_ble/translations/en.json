@@ -35,18 +35,15 @@
       "setup_method": {
         "title": "Choose setup method",
         "description": "Choose how to fetch the pairing key for {address}.",
-        "menu_options": {
-          "auto_discover": "Auto discover key over Bluetooth",
-          "cloud_login": "Sign in and fetch key from MySmartBlinds account",
-          "manual_key": "Enter key manually"
+        "data": {
+          "setup_method": "Setup method"
         }
       },
       "auto_failed": {
         "title": "Auto discovery did not find a key",
         "description": "{error}",
-        "menu_options": {
-          "cloud_login": "Sign in and fetch key from MySmartBlinds account",
-          "manual_key": "Enter key manually"
+        "data": {
+          "setup_method": "Next step"
         }
       }
     },
@@ -54,6 +51,7 @@
       "invalid_address": "Check the Bluetooth address format.",
       "invalid_key": "Check the pairing key format.",
       "cloud_login_failed": "Cloud login failed. Check your credentials or API connectivity.",
+      "invalid_setup_method": "Choose one of the available setup methods.",
       "not_supported": "This Bluetooth discovery does not look like a supported MySmartBlinds device."
     },
     "abort": {
