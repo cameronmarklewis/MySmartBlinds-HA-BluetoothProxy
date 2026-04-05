@@ -28,6 +28,9 @@ async def async_get_config_entry_diagnostics(
             "available": api.state.available,
             "native_position": api.state.native_position,
             "last_error": api.state.last_error,
+            "resolved_key_handle": api.state.resolved_key_handle,
+            "resolved_set_handle": api.state.resolved_set_handle,
+            "gatt_snapshot": api.state.gatt_snapshot,
         },
     }
 

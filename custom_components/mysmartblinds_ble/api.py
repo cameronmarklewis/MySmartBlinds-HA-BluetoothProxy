@@ -50,6 +50,9 @@ class BlindState:
     battery_level: int | None = None
     available: bool = False
     last_error: str | None = None
+    resolved_key_handle: int | None = None
+    resolved_set_handle: int | None = None
+    gatt_snapshot: list[str] | None = None
 
 
 @dataclass(slots=True)
@@ -76,6 +79,8 @@ class MySmartBlindsApi:
         self.connection_timeout = max(5.0, float(connection_timeout))
         self.write_retries = max(1, int(write_retries))
         self.state = BlindState()
+        self._preferred_key_handle = HANDLE_KEY
+        self._preferred_set_handle = HANDLE_SET
         self._lock = asyncio.Lock()
 
     @property
@@ -120,6 +125,7 @@ class MySmartBlindsApi:
                 self.address,
                 self.connection_timeout,
                 self.write_retries,
+                self,
             )
             self.state.available = True
             self.state.last_error = None
@@ -131,14 +137,19 @@ class MySmartBlindsApi:
     async def async_set_native_position(self, native_position: int) -> None:
         native_position = max(MIN_NATIVE_POSITION, min(MAX_NATIVE_POSITION, native_position))
         async with self._lock:
-            await _write_position(
+            key_handle, set_handle = await _write_position(
                 self.hass,
                 self.address,
                 self.key,
                 native_position,
                 timeout=self.connection_timeout,
                 max_attempts=self.write_retries,
+                api=self,
             )
+            self._preferred_key_handle = key_handle
+            self._preferred_set_handle = set_handle
+            self.state.resolved_key_handle = key_handle
+            self.state.resolved_set_handle = set_handle
             self.state.native_position = native_position
             self.state.available = True
             self.state.last_error = None
@@ -225,6 +236,7 @@ async def _validate_connectivity(
     address: str,
     timeout: float,
     max_attempts: int,
+    api: MySmartBlindsApi | None = None,
 ) -> None:
     ble_device = bluetooth.async_ble_device_from_address(hass, address, connectable=True)
     if ble_device is None:
@@ -241,8 +253,12 @@ async def _validate_connectivity(
             max_attempts=max_attempts,
             timeout=timeout,
         )
-        _resolve_write_target(client, HANDLE_KEY, UUID_KEY)
-        _resolve_write_target(client, HANDLE_SET, UUID_SET)
+        await _async_resolve_backend_characteristic(
+            client, (api._preferred_key_handle if api else HANDLE_KEY), UUID_KEY, "key", api
+        )
+        await _async_resolve_backend_characteristic(
+            client, (api._preferred_set_handle if api else HANDLE_SET), UUID_SET, "set", api
+        )
     except Exception as err:
         raise MySmartBlindsConnectionError(str(err)) from err
     finally:
@@ -258,7 +274,8 @@ async def _write_position(
     *,
     timeout: float,
     max_attempts: int,
-) -> None:
+    api: MySmartBlindsApi | None = None,
+) -> tuple[int, int]:
     ble_device = bluetooth.async_ble_device_from_address(hass, address, connectable=True)
     if ble_device is None:
         raise MySmartBlindsConnectionError(
@@ -274,11 +291,14 @@ async def _write_position(
             max_attempts=max_attempts,
             timeout=timeout,
         )
-        key_char = _resolve_write_target(client, HANDLE_KEY, UUID_KEY)
-        set_char = _resolve_write_target(client, HANDLE_SET, UUID_SET)
-        _LOGGER.debug("Writing key and target position to %s via BLE", address)
-        await _async_write_char(client, key_char, HANDLE_KEY, UUID_KEY, key)
-        await _async_write_char(client, set_char, HANDLE_SET, UUID_SET, bytes([native_position]))
+        preferred_key = api._preferred_key_handle if api else HANDLE_KEY
+        preferred_set = api._preferred_set_handle if api else HANDLE_SET
+        key_char = await _async_resolve_backend_characteristic(client, preferred_key, UUID_KEY, "key", api)
+        set_char = await _async_resolve_backend_characteristic(client, preferred_set, UUID_SET, "set", api)
+        _LOGGER.debug("Writing key and target position to %s via BLE using key handle %s and set handle %s", address, getattr(key_char, "handle", preferred_key), getattr(set_char, "handle", preferred_set))
+        await _async_write_char(client, key_char, getattr(key_char, "handle", preferred_key), UUID_KEY, key)
+        await _async_write_char(client, set_char, getattr(set_char, "handle", preferred_set), UUID_SET, bytes([native_position]))
+        return getattr(key_char, "handle", preferred_key), getattr(set_char, "handle", preferred_set)
     except Exception as err:
         raise MySmartBlindsConnectionError(str(err)) from err
     finally:
@@ -298,7 +318,7 @@ async def _async_write_char(
         return
     except BleakCharacteristicNotFoundError:
         _LOGGER.debug(
-            "Characteristic lookup failed for handle 0x%04x / %s via wrapper, refreshing services/backend lookup",
+            "Characteristic lookup failed for handle 0x%04x / %s via wrapper, retrying without response",
             handle,
             uuid,
         )
@@ -311,47 +331,114 @@ async def _async_write_char(
                 uuid,
                 err,
             )
-            await client.write_gatt_char(resolved_target, data, response=False)
-            return
-        raise
+        else:
+            raise
 
-    backend_target = await _async_resolve_backend_characteristic(client, handle, uuid)
-    try:
-        await client.write_gatt_char(backend_target, data, response=True)
-        return
-    except Exception as err:
-        _LOGGER.debug(
-            "Backend characteristic write-with-response failed for handle 0x%04x / %s, retrying without response: %s",
-            handle,
-            uuid,
-            err,
-        )
-    await client.write_gatt_char(backend_target, data, response=False)
+    await client.write_gatt_char(resolved_target, data, response=False)
 
 
 async def _async_resolve_backend_characteristic(
     client: BleakClient,
     handle: int,
     uuid: str,
+    purpose: str,
+    api: MySmartBlindsApi | None = None,
 ):
     backend = getattr(client, "_backend", None)
-    if backend is None:
-        raise MySmartBlindsConnectionError(
-            f"No backend available for characteristic lookup for handle {handle}"
-        )
+    discovered: list[tuple[int | None, str, list[str]]] = []
 
-    backend_get_services = getattr(backend, "get_services", None)
-    if callable(backend_get_services):
+    services_sources = []
+
+    wrapper_services = getattr(client, "services", None)
+    if wrapper_services is not None:
+        services_sources.append(wrapper_services)
+
+    if backend is not None:
+        backend_get_services = getattr(backend, "get_services", None)
+        if callable(backend_get_services):
+            try:
+                await backend_get_services()
+            except Exception as err:
+                _LOGGER.debug("Backend service refresh failed for %s handle 0x%04x / %s: %s", purpose, handle, uuid, err)
+        for source_name in ("services", "_services"):
+            svc = getattr(backend, source_name, None)
+            if svc is not None:
+                services_sources.append(svc)
+
+    # exact handle / uuid first
+    for services in services_sources:
         try:
-            await backend_get_services()
-        except Exception as err:
-            _LOGGER.debug("Backend service refresh failed for handle 0x%04x / %s: %s", handle, uuid, err)
+            for service in services:
+                for char in service.characteristics:
+                    ch_handle = getattr(char, "handle", None)
+                    ch_uuid = str(getattr(char, "uuid", "")).lower()
+                    props = list(getattr(char, "properties", []) or [])
+                    discovered.append((ch_handle, ch_uuid, props))
+                    if ch_handle == handle:
+                        _store_gatt_snapshot(api, discovered)
+                        return char
+        except Exception:
+            pass
+        try:
+            characteristic = services.get_characteristic(uuid)
+            if characteristic is not None:
+                _store_gatt_snapshot(api, discovered)
+                return characteristic
+        except Exception:
+            pass
 
-    for source_name in ("services", "_services"):
-        services = getattr(backend, source_name, None)
-        if services is None:
+    # heuristic fallback: nearest writable characteristic near expected handle
+    writable_candidates = []
+    for ch_handle, ch_uuid, props in discovered:
+        if ch_handle is None:
             continue
+        p = {str(x).lower() for x in props}
+        if "write" in p or "write-without-response" in p:
+            writable_candidates.append((abs(ch_handle - handle), ch_handle, ch_uuid, props))
 
+    if writable_candidates:
+        writable_candidates.sort(key=lambda x: (x[0], x[1]))
+        nearest_distance, nearest_handle, nearest_uuid, nearest_props = writable_candidates[0]
+        # only trust nearby handles
+        if nearest_distance <= 6:
+            _LOGGER.warning(
+                "MySmartBlinds %s characteristic 0x%04x / %s not found exactly. Using nearby writable handle 0x%04x (%s) with props %s",
+                purpose,
+                handle,
+                uuid,
+                nearest_handle,
+                nearest_uuid,
+                nearest_props,
+            )
+            for services in services_sources:
+                try:
+                    for service in services:
+                        for char in service.characteristics:
+                            if getattr(char, "handle", None) == nearest_handle:
+                                _store_gatt_snapshot(api, discovered)
+                                return char
+                except Exception:
+                    pass
+
+    _store_gatt_snapshot(api, discovered)
+    raise MySmartBlindsCharacteristicError(
+        f"Could not resolve characteristic handle 0x{handle:04x} / {uuid} from backend services"
+    )
+
+
+def _store_gatt_snapshot(api: MySmartBlindsApi | None, discovered: list[tuple[int | None, str, list[str]]]) -> None:
+    if api is None:
+        return
+    api.state.gatt_snapshot = [
+        f"{handle}:{uuid}:{','.join(props)}" for handle, uuid, props in discovered
+    ]
+
+
+def _resolve_write_target(
+    client: BleakClient, handle: int, uuid: str
+):
+    services = getattr(client, "services", None)
+    if services is not None:
         try:
             for service in services:
                 for char in service.characteristics:
@@ -359,52 +446,10 @@ async def _async_resolve_backend_characteristic(
                         return char
         except Exception:
             pass
-
         try:
             characteristic = services.get_characteristic(uuid)
             if characteristic is not None:
                 return characteristic
         except Exception:
             pass
-
-    raise MySmartBlindsCharacteristicError(
-        f"Could not resolve characteristic handle 0x{handle:04x} / {uuid} from backend services"
-    )
-
-
-def _resolve_write_target(
-    client: BleakClient, handle: int, uuid: str
-):
-    services = getattr(client, "services", None)
-    discovered: list[str] = []
-
-    if services is not None:
-        try:
-            for service in services:
-                for char in service.characteristics:
-                    char_handle = getattr(char, "handle", None)
-                    char_uuid = str(getattr(char, "uuid", "")).lower()
-                    discovered.append(f"{char_handle}:{char_uuid}")
-                    if char_handle == handle:
-                        return char
-        except Exception:
-            pass
-
-        try:
-            characteristic = services.get_characteristic(uuid)
-            if characteristic is not None:
-                return characteristic
-        except Exception:
-            pass
-
-    if discovered:
-        _LOGGER.debug(
-            "Characteristic handle 0x%04x / %s not found directly, falling back to handle write. Seen characteristics: %s",
-            handle,
-            uuid,
-            ", ".join(discovered),
-        )
-
-    # Important for HA Bluetooth wrappers and ESPHome proxies:
-    # writing by integer handle can still work even when service UUID lookup does not.
     return handle

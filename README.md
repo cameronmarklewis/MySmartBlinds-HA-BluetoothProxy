@@ -63,3 +63,8 @@ data:
 ## Notes for Bluetooth Proxy
 
 Use an ESPHome Bluetooth Proxy with active connections enabled. If you have several active BLE devices, increase proxy capacity carefully.
+
+
+## Icon
+
+This package includes the MySmartBlinds BLE icon as `icon.png` and `icon.webp`.
