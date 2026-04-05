@@ -35,8 +35,6 @@ from .const import (
 )
 
 CLOSE_DIRECTION_OPTIONS = ["down", "up"]
-METHOD_OPTIONS = [OPTION_AUTO, OPTION_CLOUD, OPTION_MANUAL]
-
 
 class MySmartBlindsBleConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 3
@@ -101,17 +99,9 @@ class MySmartBlindsBleConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
     async def async_step_setup_method(self, user_input=None):
-        if user_input is not None:
-            method = user_input[CONF_SETUP_METHOD]
-            if method == OPTION_AUTO:
-                return await self.async_step_auto_discover()
-            if method == OPTION_CLOUD:
-                return await self.async_step_cloud_login()
-            return await self.async_step_manual_key()
-
         return self.async_show_menu(
             step_id="setup_method",
-            menu_options=[OPTION_AUTO, OPTION_CLOUD, OPTION_MANUAL],
+            menu_options=["auto_discover", "cloud_login", "manual_key"],
             description_placeholders={"address": str(self._config.get(CONF_ADDRESS, ""))},
         )
 
@@ -138,15 +128,9 @@ class MySmartBlindsBleConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return await self.async_step_auto_failed()
 
     async def async_step_auto_failed(self, user_input=None):
-        if user_input is not None:
-            method = user_input[CONF_SETUP_METHOD]
-            if method == OPTION_CLOUD:
-                return await self.async_step_cloud_login()
-            return await self.async_step_manual_key()
-
         return self.async_show_menu(
             step_id="auto_failed",
-            menu_options=[OPTION_CLOUD, OPTION_MANUAL],
+            menu_options=["cloud_login", "manual_key"],
             description_placeholders={"error": self._auto_error or "Key discovery failed."},
         )
 
