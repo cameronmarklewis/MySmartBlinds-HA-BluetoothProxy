@@ -5,6 +5,7 @@ import logging
 from dataclasses import dataclass
 
 from bleak import BleakClient
+from bleak.exc import BleakCharacteristicNotFoundError
 from bleak_retry_connector import establish_connection
 from homeassistant.components import bluetooth
 from homeassistant.core import HomeAssistant
@@ -56,6 +57,13 @@ class DiscoveredBlind:
     address: str
     name: str | None
     rssi: int | None
+
+
+class _WriteCharacteristicShim:
+    def __init__(self, handle: int, uuid: str, *, write_without_response: bool = False) -> None:
+        self.handle = handle
+        self.uuid = uuid
+        self.properties = ["write-without-response"] if write_without_response else ["write"]
 
 
 class MySmartBlindsApi:
@@ -276,13 +284,62 @@ async def _write_position(
         key_char = _resolve_write_target(client, HANDLE_KEY, UUID_KEY)
         set_char = _resolve_write_target(client, HANDLE_SET, UUID_SET)
         _LOGGER.debug("Writing key and target position to %s via BLE", address)
-        await client.write_gatt_char(key_char, key, response=True)
-        await client.write_gatt_char(set_char, bytes([native_position]), response=True)
+        await _async_write_char(client, key_char, HANDLE_KEY, UUID_KEY, key)
+        await _async_write_char(client, set_char, HANDLE_SET, UUID_SET, bytes([native_position]))
     except Exception as err:
         raise MySmartBlindsConnectionError(str(err)) from err
     finally:
         if client and client.is_connected:
             await client.disconnect()
+
+
+async def _async_write_char(
+    client: BleakClient,
+    resolved_target,
+    handle: int,
+    uuid: str,
+    data: bytes,
+) -> None:
+    try:
+        await client.write_gatt_char(resolved_target, data, response=True)
+        return
+    except BleakCharacteristicNotFoundError:
+        _LOGGER.debug(
+            "Characteristic lookup failed for handle 0x%04x / %s via wrapper, trying backend shim",
+            handle,
+            uuid,
+        )
+    except Exception as err:
+        message = str(err).lower()
+        if "error=133" not in message and "unlikely error" not in message:
+            raise
+        _LOGGER.debug(
+            "Write-with-response failed for handle 0x%04x / %s, retrying with backend shim: %s",
+            handle,
+            uuid,
+            err,
+        )
+
+    backend = getattr(client, "_backend", None)
+    if backend is None:
+        raise MySmartBlindsConnectionError(
+            f"No backend available for direct write to handle {handle}"
+        )
+
+    shim = _WriteCharacteristicShim(handle, uuid, write_without_response=False)
+    try:
+        await backend.write_gatt_char(shim, data, True)
+        return
+    except Exception as err:
+        _LOGGER.debug(
+            "Backend write-with-response failed for handle 0x%04x / %s, retrying without response: %s",
+            handle,
+            uuid,
+            err,
+        )
+
+    shim_no_resp = _WriteCharacteristicShim(handle, uuid, write_without_response=True)
+    await backend.write_gatt_char(shim_no_resp, data, False)
 
 
 def _resolve_write_target(
