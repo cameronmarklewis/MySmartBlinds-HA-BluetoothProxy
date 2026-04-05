@@ -177,6 +177,34 @@ class MySmartBlindsBleConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             description_placeholders={"error": self._auto_error or "Key discovery failed."},
         )
 
+    def _normalized_mac(self, address: str) -> str:
+        return "".join(ch for ch in str(address).upper() if ch in "0123456789ABCDEF")
+
+    def _reversed_mac(self, address: str) -> str:
+        value = self._normalized_mac(address)
+        if len(value) != 12:
+            return value
+        return "".join(reversed([value[i:i+2] for i in range(0, 12, 2)]))
+
+    def _find_cloud_match(self, blinds: list[CloudBlind], address: str) -> CloudBlind | None:
+        wanted = self._normalized_mac(address)
+        if len(wanted) != 12:
+            return None
+
+        exact = [blind for blind in blinds if self._normalized_mac(blind.address) == wanted]
+        if len(exact) == 1:
+            return exact[0]
+
+        reversed_matches = [blind for blind in blinds if self._reversed_mac(blind.address) == wanted]
+        if len(reversed_matches) == 1:
+            return reversed_matches[0]
+
+        any_match = [blind for blind in blinds if mac_matches(blind.address, address)]
+        if len(any_match) == 1:
+            return any_match[0]
+
+        return None
+
     async def async_step_cloud_login(self, user_input=None):
         errors: dict[str, str] = {}
 
@@ -193,7 +221,7 @@ class MySmartBlindsBleConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 self._config[CONF_USERNAME] = username
                 self._config[CONF_PASSWORD] = password
                 address = str(self._config[CONF_ADDRESS])
-                match = next((blind for blind in blinds if mac_matches(blind.address, address)), None)
+                match = self._find_cloud_match(blinds, address)
                 if match is not None:
                     self._config[CONF_ADDRESS] = address
                     return self._create_entry(match.key_hex, KEY_SOURCE_CLOUD)
@@ -223,20 +251,28 @@ class MySmartBlindsBleConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 None,
             )
             if blind is not None:
-                self._config[CONF_ADDRESS] = blind.address
-                await self.async_set_unique_id(blind.address)
+                requested_address = str(self._config.get(CONF_ADDRESS, ""))
+                target_address = requested_address
+                if not mac_matches(blind.address, requested_address):
+                    target_address = blind.address
+                self._config[CONF_ADDRESS] = target_address
+                await self.async_set_unique_id(target_address)
                 self._abort_if_unique_id_configured()
                 return self._create_entry(blind.key_hex, KEY_SOURCE_CLOUD)
 
         requested_address = str(self._config.get(CONF_ADDRESS, ""))
+        requested_norm = self._normalized_mac(requested_address)
         options = {}
         for blind in self._cloud_blinds:
+            blind_norm = self._normalized_mac(blind.address)
+            blind_reversed = self._reversed_mac(blind.address)
             label = f"{blind.display_name} ({blind.address})"
-            if mac_matches(blind.address, requested_address):
-                if blind.address != requested_address:
-                    label += f" [matches {requested_address} via reversed MAC]"
-                else:
-                    label += " [exact match]"
+            if blind_norm == requested_norm:
+                label += " [exact match]"
+            elif blind_reversed == requested_norm:
+                label += f" [same blind, reversed MAC for {requested_address}]"
+            elif mac_matches(blind.address, requested_address):
+                label += f" [likely match for {requested_address}]"
             options[blind.encoded_mac] = label
         schema = vol.Schema(
             {

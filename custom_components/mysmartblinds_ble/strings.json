@@ -24,7 +24,7 @@
       },
       "cloud_select": {
         "title": "Select blind from cloud account",
-        "description": "No exact cloud match was found for {address}. Choose one of the {count} blinds returned by your account."
+        "description": "No automatic cloud match was confirmed for {address}. Choose one of the {count} blinds returned by your account. Reversed MAC formats are labelled when detected."
       },
       "manual_key": {
         "title": "Enter pairing key manually",
