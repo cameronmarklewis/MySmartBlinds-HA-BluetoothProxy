@@ -5,7 +5,6 @@ import logging
 from dataclasses import dataclass
 
 from bleak import BleakClient
-from bleak.backends.characteristic import BleakGATTCharacteristic
 from bleak_retry_connector import establish_connection
 from homeassistant.components import bluetooth
 from homeassistant.core import HomeAssistant
@@ -288,13 +287,18 @@ async def _write_position(
 
 def _resolve_write_target(
     client: BleakClient, handle: int, uuid: str
-) -> BleakGATTCharacteristic | str:
+):
     services = getattr(client, "services", None)
+    discovered: list[str] = []
+
     if services is not None:
         try:
             for service in services:
                 for char in service.characteristics:
-                    if getattr(char, "handle", None) == handle:
+                    char_handle = getattr(char, "handle", None)
+                    char_uuid = str(getattr(char, "uuid", "")).lower()
+                    discovered.append(f"{char_handle}:{char_uuid}")
+                    if char_handle == handle:
                         return char
         except Exception:
             pass
@@ -306,4 +310,14 @@ def _resolve_write_target(
         except Exception:
             pass
 
-    return uuid
+    if discovered:
+        _LOGGER.debug(
+            "Characteristic handle 0x%04x / %s not found directly, falling back to handle write. Seen characteristics: %s",
+            handle,
+            uuid,
+            ", ".join(discovered),
+        )
+
+    # Important for HA Bluetooth wrappers and ESPHome proxies:
+    # writing by integer handle can still work even when service UUID lookup does not.
+    return handle
