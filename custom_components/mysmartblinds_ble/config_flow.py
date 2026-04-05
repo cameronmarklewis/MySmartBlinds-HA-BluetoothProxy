@@ -342,7 +342,7 @@ class MySmartBlindsBleConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
 class MySmartBlindsBleOptionsFlow(config_entries.OptionsFlow):
     def __init__(self, config_entry):
-        self.config_entry = config_entry
+        self._entry = config_entry
 
     async def async_step_init(self, user_input=None):
         if user_input is not None:
@@ -352,25 +352,25 @@ class MySmartBlindsBleOptionsFlow(config_entries.OptionsFlow):
             {
                 vol.Optional(
                     CONF_CLOSE_DIRECTION,
-                    default=self.config_entry.options.get(
+                    default=self._entry.options.get(
                         CONF_CLOSE_DIRECTION,
-                        self.config_entry.data.get(CONF_CLOSE_DIRECTION, DEFAULT_CLOSE_DIRECTION),
+                        self._entry.data.get(CONF_CLOSE_DIRECTION, DEFAULT_CLOSE_DIRECTION),
                     ),
                 ): vol.In(CLOSE_DIRECTION_OPTIONS),
                 vol.Optional(
                     CONF_CONNECTION_TIMEOUT,
-                    default=self.config_entry.options.get(
+                    default=self._entry.options.get(
                         CONF_CONNECTION_TIMEOUT,
-                        self.config_entry.data.get(
+                        self._entry.data.get(
                             CONF_CONNECTION_TIMEOUT, DEFAULT_CONNECTION_TIMEOUT
                         ),
                     ),
                 ): vol.All(vol.Coerce(float), vol.Range(min=5, max=60)),
                 vol.Optional(
                     CONF_WRITE_RETRIES,
-                    default=self.config_entry.options.get(
+                    default=self._entry.options.get(
                         CONF_WRITE_RETRIES,
-                        self.config_entry.data.get(CONF_WRITE_RETRIES, DEFAULT_WRITE_RETRIES),
+                        self._entry.data.get(CONF_WRITE_RETRIES, DEFAULT_WRITE_RETRIES),
                     ),
                 ): vol.All(vol.Coerce(int), vol.Range(min=1, max=10)),
             }

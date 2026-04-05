@@ -94,8 +94,8 @@ class MySmartBlindsCover(RestoreEntity, CoverEntity):
             self._api.state.available = True
             self._api.state.last_error = None
         except Exception as err:
-            self._api.state.available = False
             self._api.state.last_error = str(err)
+            await self._api.async_refresh_availability()
             _LOGGER.warning("MySmartBlinds command failed for %s: %s", self._api.address, err)
             raise
         finally:
