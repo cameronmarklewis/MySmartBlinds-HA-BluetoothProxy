@@ -2,6 +2,26 @@
 
 A Home Assistant custom integration for controlling MySmartBlinds motors directly over native Bluetooth, including ESPHome Bluetooth Proxy.
 
+## Bluetooth command endpoint fix
+
+Movement commands use UUID `00001403-1212-efde-1600-785feabcd123` after
+writing the configured pairing key to `00001409-1212-efde-1600-785feabcd123`.
+GATT handle numbers differ between firmware and Bluetooth proxy backends, so
+endpoints are resolved by their writable UUID. Missing or ambiguous endpoints
+raise an error instead of falling back to an unrelated writable handle.
+Command errors remain visible until a successful command or connectivity check.
+
+Validated on 25 October 2026 with a Kitchen MySmartBlinds motor: open and close
+commands completed through Home Assistant Bluetooth, and physical movement in
+both directions was confirmed. Other motors have not yet been physically tested.
+Position remains optimistic; a successful BLE write does not prove movement.
+
+Run the isolated regression suite with:
+
+```sh
+python3 tests/test_mysmartblinds_ble.py
+```
+
 ## What changed in v3
 
 - Setup dialog now supports three key paths: Bluetooth auto-discovery, MySmartBlinds cloud login, or manual key entry
@@ -11,7 +31,7 @@ A Home Assistant custom integration for controlling MySmartBlinds motors directl
 
 ## Known limitations
 
-- This is based on the reverse-engineered BLE protocol and is still hardware-unverified.
+- This uses a reverse-engineered BLE protocol. Hardware validation currently covers one Kitchen tilt motor; other firmware variants may differ.
 - Position is optimistic. The BLE protocol used by public libraries does not provide reliable state readback.
 - Auto key discovery is only designed for the common one-byte key pattern.
 - Bluetooth proxies have limited active connection slots, so a busy ESP32 proxy can still be the bottleneck.
