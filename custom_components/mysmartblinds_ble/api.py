@@ -115,8 +115,6 @@ class MySmartBlindsApi:
 
     async def async_refresh_availability(self) -> None:
         self.state.available = self.is_device_present()
-        if self.state.available:
-            self.state.last_error = None
 
     async def async_ping(self) -> None:
         async with self._lock:
@@ -365,64 +363,29 @@ async def _async_resolve_backend_characteristic(
             if svc is not None:
                 services_sources.append(svc)
 
-    # exact handle / uuid first
+    # Handles vary by firmware and proxy backend. Only a writable UUID match
+    # identifies the command endpoint; a nearby handle may be an unrelated setting.
+    matches = {}
     for services in services_sources:
-        try:
-            for service in services:
-                for char in service.characteristics:
-                    ch_handle = getattr(char, "handle", None)
-                    ch_uuid = str(getattr(char, "uuid", "")).lower()
-                    props = list(getattr(char, "properties", []) or [])
-                    discovered.append((ch_handle, ch_uuid, props))
-                    if ch_handle == handle:
-                        _store_gatt_snapshot(api, discovered)
-                        return char
-        except Exception:
-            pass
-        try:
-            characteristic = services.get_characteristic(uuid)
-            if characteristic is not None:
-                _store_gatt_snapshot(api, discovered)
-                return characteristic
-        except Exception:
-            pass
+        for service in services:
+            for char in service.characteristics:
+                ch_handle = getattr(char, "handle", None)
+                ch_uuid = str(getattr(char, "uuid", "")).lower()
+                props = list(getattr(char, "properties", []) or [])
+                discovered.append((ch_handle, ch_uuid, props))
+                if ch_uuid == uuid.lower() and {str(p).lower() for p in props} & {
+                    "write", "write-without-response"
+                }:
+                    matches[ch_handle] = char
 
-    # heuristic fallback: nearest writable characteristic near expected handle
-    writable_candidates = []
-    for ch_handle, ch_uuid, props in discovered:
-        if ch_handle is None:
-            continue
-        p = {str(x).lower() for x in props}
-        if "write" in p or "write-without-response" in p:
-            writable_candidates.append((abs(ch_handle - handle), ch_handle, ch_uuid, props))
-
-    if writable_candidates:
-        writable_candidates.sort(key=lambda x: (x[0], x[1]))
-        nearest_distance, nearest_handle, nearest_uuid, nearest_props = writable_candidates[0]
-        # only trust nearby handles
-        if nearest_distance <= 6:
-            _LOGGER.warning(
-                "MySmartBlinds %s characteristic 0x%04x / %s not found exactly. Using nearby writable handle 0x%04x (%s) with props %s",
-                purpose,
-                handle,
-                uuid,
-                nearest_handle,
-                nearest_uuid,
-                nearest_props,
-            )
-            for services in services_sources:
-                try:
-                    for service in services:
-                        for char in service.characteristics:
-                            if getattr(char, "handle", None) == nearest_handle:
-                                _store_gatt_snapshot(api, discovered)
-                                return char
-                except Exception:
-                    pass
-
-    _store_gatt_snapshot(api, discovered)
+    _store_gatt_snapshot(api, list(dict.fromkeys(
+        (h, u, tuple(p)) for h, u, p in discovered
+    )))
+    if len(matches) == 1:
+        return next(iter(matches.values()))
     raise MySmartBlindsCharacteristicError(
-        f"Could not resolve characteristic handle 0x{handle:04x} / {uuid} from backend services"
+        f"Expected exactly one writable {purpose} characteristic {uuid}; "
+        f"found {len(matches)}. Refusing to guess by handle 0x{handle:04x}"
     )
 
 
@@ -432,24 +395,3 @@ def _store_gatt_snapshot(api: MySmartBlindsApi | None, discovered: list[tuple[in
     api.state.gatt_snapshot = [
         f"{handle}:{uuid}:{','.join(props)}" for handle, uuid, props in discovered
     ]
-
-
-def _resolve_write_target(
-    client: BleakClient, handle: int, uuid: str
-):
-    services = getattr(client, "services", None)
-    if services is not None:
-        try:
-            for service in services:
-                for char in service.characteristics:
-                    if getattr(char, "handle", None) == handle:
-                        return char
-        except Exception:
-            pass
-        try:
-            characteristic = services.get_characteristic(uuid)
-            if characteristic is not None:
-                return characteristic
-        except Exception:
-            pass
-    return handle
