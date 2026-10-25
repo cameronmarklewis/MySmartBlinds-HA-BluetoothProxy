@@ -42,13 +42,13 @@ def client(*chars):
 
 
 class Endpoints(unittest.IsolatedAsyncioTestCase):
-    async def test_kitchen_ignores_wrong_uuid_at_old_handle(self):
+    async def test_proxy_ignores_wrong_uuid_at_old_handle(self):
         motor = client(char(18, api.UUID_KEY), char(21, api.UUID_SET),
                        char(31, '00001501-1212-efde-1600-785feabcd123'))
         result = await api._async_resolve_backend_characteristic(motor, 31, api.UUID_SET, 'set')
         self.assertEqual(result.handle, 21)
 
-    async def test_bedroom_shifted_handles(self):
+    async def test_firmware_shifted_handles(self):
         motor = client(char(26, api.UUID_KEY), char(30, api.UUID_SET))
         key = await api._async_resolve_backend_characteristic(motor, 27, api.UUID_KEY, 'key')
         target = await api._async_resolve_backend_characteristic(motor, 31, api.UUID_SET, 'set')
@@ -68,7 +68,7 @@ class Endpoints(unittest.IsolatedAsyncioTestCase):
 
     async def test_write_authenticates_then_moves_and_disconnects(self):
         motor = client(char(18, api.UUID_KEY), char(21, api.UUID_SET), char(31, 'wrong'))
-        blind = api.MySmartBlindsApi(None, 'D1:2A:2C:7C:BF:D2', '010203040506')
+        blind = api.MySmartBlindsApi(None, 'C0:00:00:00:00:01', '010203040506')
         with patch.object(api.bluetooth, 'async_ble_device_from_address', return_value=object(), create=True), patch.object(api, 'establish_connection', AsyncMock(return_value=motor)):
             await blind.async_open()
         calls = motor.write_gatt_char.await_args_list
@@ -78,7 +78,7 @@ class Endpoints(unittest.IsolatedAsyncioTestCase):
 
     async def test_invalid_target_sends_no_writes_or_optimistic_update(self):
         motor = client(char(18, api.UUID_KEY), char(31, 'wrong'))
-        blind = api.MySmartBlindsApi(None, 'D1:2A:2C:7C:BF:D2', '01')
+        blind = api.MySmartBlindsApi(None, 'C0:00:00:00:00:01', '01')
         blind.state.native_position = 200
         with patch.object(api.bluetooth, 'async_ble_device_from_address', return_value=object(), create=True), patch.object(api, 'establish_connection', AsyncMock(return_value=motor)):
             with self.assertRaises(api.MySmartBlindsConnectionError):
@@ -88,7 +88,7 @@ class Endpoints(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(blind.state.native_position, 200)
 
     async def test_advertisement_does_not_clear_command_error(self):
-        blind = api.MySmartBlindsApi(None, 'D1:2A:2C:7C:BF:D2', '01')
+        blind = api.MySmartBlindsApi(None, 'C0:00:00:00:00:01', '01')
         blind.state.last_error = 'write failed'
         with patch.object(blind, 'is_device_present', return_value=True):
             await blind.async_refresh_availability()

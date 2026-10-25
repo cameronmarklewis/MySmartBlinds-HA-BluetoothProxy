@@ -12,16 +12,16 @@
     }
   ],
   "codeowners": [
-    "@cameronlewis"
+    "@cameronmarklewis"
   ],
   "config_flow": true,
   "dependencies": [
     "bluetooth"
   ],
-  "documentation": "https://github.com/cameronlewis/mysmartblinds_ble",
+  "documentation": "https://github.com/cameronmarklewis/MySmartBlinds-HA-BluetoothProxy",
   "integration_type": "device",
   "iot_class": "local_polling",
-  "issue_tracker": "https://github.com/cameronlewis/mysmartblinds_ble/issues",
+  "issue_tracker": "https://github.com/cameronmarklewis/MySmartBlinds-HA-BluetoothProxy/issues",
   "loggers": [
     "custom_components.mysmartblinds_ble"
   ],
@@ -29,5 +29,5 @@
     "bleak>=0.22.3",
     "bleak-retry-connector>=3.8.0"
   ],
-  "version": "0.3.1"
+  "version": "0.3.2"
 }
